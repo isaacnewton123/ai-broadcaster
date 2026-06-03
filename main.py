@@ -38,18 +38,7 @@ logger = get_logger(__name__)
 
 JobDocument = dict[str, Any]
 
-# ─── Health Check Server ──────────────────────────────────────────────────────
-
-
-async def handle_root(request: web.Request) -> web.Response:
-    """Root endpoint — menampilkan status bot."""
-    return web.Response(text="Bot Broadcaster is alive! 🚀", content_type="text/plain")
-
-
-async def handle_ping(request: web.Request) -> web.Response:
-    """Ping endpoint — untuk Render uptime monitoring."""
-    return web.Response(text="pong", content_type="text/plain")
-
+from server_stats import handle_root, handle_ping
 
 async def start_health_server() -> None:
     """Jalankan web server kecil untuk health check / ping."""
