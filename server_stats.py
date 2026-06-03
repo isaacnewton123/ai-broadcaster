@@ -4,14 +4,17 @@ server_stats.py — Modul untuk web server dan dashboard statistik bot.
 Menangani request ke endpoint `/` (dashboard HTML) dan `/ping` (health check).
 """
 from aiohttp import web
-from database import db, MONGODB_HISTORY_COLLECTION, MONGODB_JOBS_COLLECTION
+from database import _get_history_collection, _get_jobs_collection
 
 
 async def handle_root(request: web.Request) -> web.Response:
     """Root endpoint — menampilkan status bot dan stats dalam bentuk HTML."""
     try:
-        history_count = await db[MONGODB_HISTORY_COLLECTION].count_documents({})
-        jobs_count = await db[MONGODB_JOBS_COLLECTION].count_documents({})
+        history_coll = _get_history_collection()
+        jobs_coll = _get_jobs_collection()
+        
+        history_count = await history_coll.count_documents({})
+        jobs_count = await jobs_coll.count_documents({})
         pending_count = max(0, jobs_count - history_count)
         
         html = f"""
