@@ -25,8 +25,8 @@ JobDocument = dict[str, Any]
 # ─── Prompt Template ─────────────────────────────────────────────────────────
 
 SOCIAL_PROMPT_TEMPLATE: str = (
-    "Kamu adalah Social Media Manager profesional untuk portal lowongan kerja Indonesia bernama nyarikerja.online.\n"
-    "Tugas kamu: buatkan SATU caption sosial media yang UNIVERSAL (bisa dipakai di Telegram, Instagram, dan Facebook sekaligus).\n\n"
+    "Kamu adalah Copywriter profesional untuk portal lowongan kerja nyarikerja.online.\n"
+    "Tugas kamu: buatkan caption sosial media yang berfokus pada persuasif/ajakan, terstruktur, rapi, dan UNIVERSAL (aman di-copy ke Telegram, IG, dan FB tanpa aneh).\n\n"
     "DATA LOKER:\n"
     "- Perusahaan: {company}\n"
     "- Posisi: {positions}\n"
@@ -35,15 +35,23 @@ SOCIAL_PROMPT_TEMPLATE: str = (
     "- Pendidikan: {education}\n"
     "- Gaji: {salaries}\n"
     "- Link: {job_url}\n\n"
-    "ATURAN:\n"
-    "1. Caption HARUS singkat, padat, dan menarik (maksimal 600 karakter).\n"
-    "2. WAJIB gunakan emoji yang relevan di setiap baris untuk mempercantik.\n"
-    "3. Sorot informasi GAJI jika tersedia (orang Indonesia sangat tertarik dengan gaji).\n"
-    "4. Sorot POSISI dan LOKASI agar mudah ditemukan.\n"
-    "5. Akhiri dengan ajakan (Call to Action) yang kuat: 'Klik link di bawah untuk melamar!' atau sejenisnya.\n"
-    "6. JANGAN gunakan hashtag (#). Cukup emoji dan teks saja.\n"
-    "7. JANGAN gunakan markdown bold (**) atau italic (*). Gunakan plain text saja.\n"
-    "8. FORMAT RESPONSE: Respon HANYA berupa JSON murni (tanpa markdown code block). Format:\n"
+    "ATURAN COPYWRITING & FORMAT:\n"
+    "1. STRUKTUR UTAMA (Gunakan pola ini, TAPI VARIASIKAN kata-katanya di setiap postingan agar tidak monoton):\n"
+    "   - Judul: Menarik, relevan dengan posisi, gunakan huruf kapital semua dan 1-2 emoji (misal: 🚀 KESEMPATAN BERKARIR DI... atau 🌟 JADILAH BAGIAN DARI...)\n"
+    "   - Hook / Pembuka: 1-2 kalimat tanya atau pernyataan persuasif untuk menarik perhatian pencari kerja.\n"
+    "   - Deskripsi Singkat: Rangkum posisi atau perusahaan dengan bahasa yang mengundang minat.\n"
+    "   - Kualifikasi: Daftar poin-poin persyaratan (gunakan tanda strip '-' sebagai bullet points).\n"
+    "   - Deadline Pendaftaran: (Tampilkan jika ada informasinya, jika tidak ada abaikan).\n"
+    "   - Link Lamaran: Letakkan {job_url} di baris baru.\n"
+    "   - Penutup (Call to Action): Kalimat ajakan semangat untuk segera melamar.\n"
+    "   - Hashtag: Tambahkan minimal 5 hashtag yang relevan di bagian paling bawah (contoh: #LowonganKerja #LokerLogistik).\n\n"
+    "2. GAYA BAHASA:\n"
+    "   - Buat setiap caption TERASA UNIK dan BERBEDA. Jangan menggunakan kalimat pembuka/penutup yang sama persis setiap saat.\n"
+    "   - Gunakan gaya bahasa natural, semangat, dan profesional.\n\n"
+    "3. FORMAT:\n"
+    "   - JANGAN gunakan tag HTML (seperti <b>) atau Markdown (* atau **).\n"
+    "   - MAKSIMAL 900 karakter secara keseluruhan agar teks tidak terpotong saat dikirim ke Telegram.\n"
+    "   - FORMAT RESPONSE: Respon HANYA berupa JSON murni. Format:\n"
     '{{"caption": "isi caption di sini"}}\n'
 )
 
@@ -152,7 +160,10 @@ def rewrite_for_social(job: JobDocument) -> str:
                     return caption
                 logger.warning(f"Model {model} mengembalikan caption kosong.")
         except Exception as e:
-            logger.warning(f"Model {model} gagal: {e}")
+            error_detail = ""
+            if hasattr(e, "read"):
+                error_detail = e.read().decode("utf-8", errors="ignore")
+            logger.warning(f"Model {model} gagal: {e} | Detail: {error_detail}")
             continue
 
     logger.error("Semua model AI gagal. Menggunakan fallback caption.")
