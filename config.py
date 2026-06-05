@@ -40,6 +40,15 @@ GEMINI_MODELS: list[str] = [
     "gemini-2.5-flash-lite",
 ]
 
+# ─── Facebook Page ────────────────────────────────────────────────────────────
+
+FB_PAGE_ID: Optional[str] = os.environ.get("FB_PAGE_ID")
+FB_PAGE_ACCESS_TOKEN: Optional[str] = os.environ.get("FB_PAGE_ACCESS_TOKEN")
+
+# ─── Instagram Business ──────────────────────────────────────────────────────
+
+IG_ACCOUNT_ID: Optional[str] = os.environ.get("IG_ACCOUNT_ID")
+
 # ─── MongoDB ──────────────────────────────────────────────────────────────────
 
 MONGODB_URI: Optional[str] = os.environ.get("MONGODB_URI")
@@ -51,6 +60,14 @@ MONGODB_HISTORY_COLLECTION: str = os.environ.get("MONGODB_HISTORY_COLLECTION", "
 
 POLL_INTERVAL_SECONDS: int = int(os.environ.get("POLL_INTERVAL_SECONDS", "300"))
 THROTTLE_DELAY_SECONDS: int = int(os.environ.get("THROTTLE_DELAY_SECONDS", "15"))
+
+# ─── Cloudflare R2 (untuk upload poster IG) ──────────────────────────────────
+
+R2_ACCESS_KEY_ID: Optional[str] = os.environ.get("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY: Optional[str] = os.environ.get("R2_SECRET_ACCESS_KEY")
+R2_ACCOUNT_ID: Optional[str] = os.environ.get("R2_ACCOUNT_ID")
+R2_BUCKET_NAME: str = os.environ.get("R2_BUCKET_NAME", "nyarikerja")
+R2_PUBLIC_DOMAIN: str = os.environ.get("R2_PUBLIC_DOMAIN", "https://cdn.nyarikerja.online")
 
 # ─── Server (Ping / Health Check) ────────────────────────────────────────────
 
@@ -88,3 +105,24 @@ def validate_mongodb() -> None:
         print("Isi dengan connection string MongoDB Atlas Anda.")
         print("=" * 70)
         sys.exit(1)
+
+
+def validate_facebook() -> bool:
+    """Periksa apakah Facebook Page sudah dikonfigurasi. Return True jika siap."""
+    if not FB_PAGE_ID or not FB_PAGE_ACCESS_TOKEN:
+        print("INFO: FB_PAGE_ID / FB_PAGE_ACCESS_TOKEN belum diset. Facebook posting dinonaktifkan.")
+        return False
+    print("✅ Facebook Page terkonfigurasi.")
+    return True
+
+
+def validate_instagram() -> bool:
+    """Periksa apakah Instagram Business sudah dikonfigurasi. Return True jika siap."""
+    if not IG_ACCOUNT_ID or not FB_PAGE_ACCESS_TOKEN:
+        print("INFO: IG_ACCOUNT_ID / FB_PAGE_ACCESS_TOKEN belum diset. Instagram posting dinonaktifkan.")
+        return False
+    if not R2_ACCESS_KEY_ID or not R2_SECRET_ACCESS_KEY:
+        print("INFO: R2 credentials belum diset. Instagram posting membutuhkan R2 untuk upload gambar.")
+        return False
+    print("✅ Instagram Business terkonfigurasi.")
+    return True

@@ -4,6 +4,7 @@ main.py — Orchestrator utama Bot Broadcaster.
 Berisi:
 - Polling loop (cek MongoDB setiap POLL_INTERVAL_SECONDS)
 - Queue & Throttle (jeda THROTTLE_DELAY_SECONDS antar posting)
+- Multi-platform publishing: Telegram, Facebook, Instagram
 - Health check server (/ping endpoint untuk Render uptime)
 
 Cara pakai:
@@ -23,11 +24,17 @@ from config import (
     POLL_INTERVAL_SECONDS,
     PORT,
     THROTTLE_DELAY_SECONDS,
+    validate_facebook,
     validate_gemini,
+    validate_instagram,
     validate_mongodb,
     validate_telegram,
 )
 from database import get_unposted_jobs, mark_as_posted
+from facebook_publisher import publish_photo_to_facebook, publish_text_to_facebook
+from instagram_publisher import publish_photo_to_instagram
+from poster_facebook import generate_landscape_bytes
+from poster_instagram import generate_square_bytes
 from poster_telegram import generate_portrait_bytes
 from logger import get_logger
 from telegram_publisher import send_photo_with_caption, send_text_only
@@ -37,6 +44,11 @@ logger = get_logger(__name__)
 # ─── Type Aliases ─────────────────────────────────────────────────────────────
 
 JobDocument = dict[str, Any]
+
+# ─── Platform Flags ──────────────────────────────────────────────────────────
+
+_fb_enabled: bool = False
+_ig_enabled: bool = False
 
 from server_stats import handle_root, handle_ping
 
@@ -57,13 +69,13 @@ async def start_health_server() -> None:
 
 
 async def process_single_job(job: JobDocument) -> bool:
-    """Proses 1 loker: AI rewrite → render poster → kirim ke Telegram → catat.
+    """Proses 1 loker: AI rewrite → render poster → kirim ke semua platform → catat.
 
     Args:
         job: Dokumen loker dari MongoDB.
 
     Returns:
-        True jika seluruh proses berhasil, False jika gagal.
+        True jika minimal satu platform berhasil, False jika semua gagal.
     """
     slug: str = job.get("slug", "unknown")
     company: str = job.get("company", "Perusahaan")
@@ -74,33 +86,89 @@ async def process_single_job(job: JobDocument) -> bool:
     caption: str = rewrite_for_social(job)
     logger.info(f"✅ Caption berhasil di-generate ({len(caption)} karakter)")
 
-    # Langkah 2: Render Poster (in-memory)
-    logger.info("🎨 Merender poster 1080x1350...")
-    poster: io.BytesIO | None = generate_portrait_bytes(job)
+    any_success: bool = False
 
-    # Langkah 3: Kirim ke Telegram
-    send_success: bool = False
-    if poster is not None:
+    # ═══════════════════════════════════════════════════════════════════════
+    # PLATFORM 1: TELEGRAM
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info("── 📱 Platform: TELEGRAM ──")
+    tg_poster: io.BytesIO | None = generate_portrait_bytes(job)
+
+    if tg_poster is not None:
         logger.info("📤 Mengirim foto + caption ke Telegram...")
-        send_success = await send_photo_with_caption(
-            image_bytes=poster,
+        tg_success: bool = await send_photo_with_caption(
+            image_bytes=tg_poster,
             caption=caption,
             filename=f"{slug}.png",
         )
-        # Hapus poster dari memori
-        poster.close()
+        tg_poster.close()
+        if tg_success:
+            any_success = True
+        else:
+            logger.error("❌ Gagal mengirim ke Telegram.")
     else:
-        logger.warning("⚠️ Poster gagal dirender. Mengirim teks saja...")
-        send_success = await send_text_only(caption)
+        logger.warning("⚠️ Poster Telegram gagal dirender. Mengirim teks saja...")
+        tg_success = await send_text_only(caption)
+        if tg_success:
+            any_success = True
 
-    if not send_success:
-        logger.error(f"❌ Gagal mengirim ke Telegram: {slug}")
+    # ═══════════════════════════════════════════════════════════════════════
+    # PLATFORM 2: FACEBOOK
+    # ═══════════════════════════════════════════════════════════════════════
+    if _fb_enabled:
+        logger.info("── 📘 Platform: FACEBOOK ──")
+        fb_poster: io.BytesIO | None = generate_landscape_bytes(job)
+
+        if fb_poster is not None:
+            logger.info("📤 Mengirim foto + caption ke Facebook Page...")
+            fb_success: bool = await publish_photo_to_facebook(
+                image_bytes=fb_poster,
+                caption=caption,
+                filename=f"{slug}-fb.png",
+            )
+            fb_poster.close()
+            if fb_success:
+                any_success = True
+            else:
+                logger.error("❌ Gagal posting ke Facebook.")
+        else:
+            logger.warning("⚠️ Poster Facebook gagal dirender. Mengirim teks saja...")
+            fb_success = await publish_text_to_facebook(caption)
+            if fb_success:
+                any_success = True
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PLATFORM 3: INSTAGRAM
+    # ═══════════════════════════════════════════════════════════════════════
+    if _ig_enabled:
+        logger.info("── 📸 Platform: INSTAGRAM ──")
+        ig_poster: io.BytesIO | None = generate_square_bytes(job)
+
+        if ig_poster is not None:
+            logger.info("📤 Mengirim foto + caption ke Instagram...")
+            ig_success: bool = await publish_photo_to_instagram(
+                image_bytes=ig_poster,
+                caption=caption,
+                slug=slug,
+            )
+            ig_poster.close()
+            if ig_success:
+                any_success = True
+            else:
+                logger.error("❌ Gagal posting ke Instagram.")
+        else:
+            logger.warning("⚠️ Poster Instagram gagal dirender. IG dilewati.")
+
+    # ═══════════════════════════════════════════════════════════════════════
+
+    if not any_success:
+        logger.error(f"❌ Semua platform gagal untuk: {slug}")
         return False
 
-    # Langkah 4: Catat ke broadcast_history
+    # Catat ke broadcast_history
     recorded: bool = await mark_as_posted(slug)
     if not recorded:
-        logger.error(f"⚠️ Terkirim ke Telegram, tapi gagal dicatat di history: {slug}")
+        logger.error(f"⚠️ Terkirim, tapi gagal dicatat di history: {slug}")
 
     return True
 
@@ -110,8 +178,15 @@ async def process_single_job(job: JobDocument) -> bool:
 
 async def polling_loop() -> None:
     """Loop utama: cek MongoDB → proses loker baru → tidur → ulangi."""
+    platforms: list[str] = ["Telegram"]
+    if _fb_enabled:
+        platforms.append("Facebook")
+    if _ig_enabled:
+        platforms.append("Instagram")
+
     logger.info("=" * 60)
     logger.info("🚀 Bot Broadcaster dimulai!")
+    logger.info(f"📡 Platform aktif: {', '.join(platforms)}")
     logger.info(f"⏱  Interval polling: {POLL_INTERVAL_SECONDS} detik")
     logger.info(f"⏱  Jeda antar posting: {THROTTLE_DELAY_SECONDS} detik")
     logger.info("=" * 60)
@@ -150,9 +225,13 @@ async def polling_loop() -> None:
 
 async def main() -> None:
     """Entry point utama — validasi → server → polling."""
+    global _fb_enabled, _ig_enabled
+
     validate_telegram()
     validate_mongodb()
     validate_gemini()
+    _fb_enabled = validate_facebook()
+    _ig_enabled = validate_instagram()
 
     # Jalankan health check server dan polling loop secara paralel
     await asyncio.gather(
